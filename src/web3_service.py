@@ -1,9 +1,42 @@
 import time
-from web3 import Web3
 import json
 from decimal import Decimal
+import sys
 
 from src.config import config
+
+# We'll lazily import web3 to provide a helpful error if ENS/specs are missing.
+# This avoids hard crash during 'import' and gives clear pip commands to fix the env.
+def _import_web3():
+    try:
+        from web3 import Web3
+        return Web3
+    except Exception as e:
+        # Common cause: web3 PyPI release missing ens/specs (yanked) or ens/web3 version conflicts.
+        msg = """
+Cannot import web3 properly. Typical causes:
+ - Using a yanked PyPI release of web3 (missing ens/specs)
+ - Missing or incompatible 'ens' package versions
+
+Suggested fixes (run inside your virtualenv):
+
+1) Preferred: install web3 from GitHub (includes correct package data):
+   pip uninstall web3 ens -y
+   pip install --no-cache-dir git+https://github.com/ethereum/web3.py.git
+
+2) Or try a working PyPI release (older):
+   pip uninstall web3 ens -y
+   pip install --no-cache-dir web3==6.5.0
+
+After installing, re-run your script.
+
+Original import error:
+""" + repr(e)
+        print(msg, file=sys.stderr)
+        raise
+
+# Try importing Web3 now (will raise with helpful message if failing)
+Web3 = _import_web3()
 
 # load ABIs from local files (provided below)
 with open("src/abis/UniswapV2Router.json") as f:
@@ -11,7 +44,8 @@ with open("src/abis/UniswapV2Router.json") as f:
 with open("src/abis/ERC20.json") as f:
     ERC20_ABI = json.load(f)["abi"]
 
-w3 = Web3(Web3.HTTPProvider(config.RPC_URL, request_kwargs={"timeout": 30}))
+from web3 import Web3 as _Web3  # alias for usage
+w3 = _Web3(_Web3.HTTPProvider(config.RPC_URL, request_kwargs={"timeout": 30}))
 if not w3.is_connected():
     raise RuntimeError("Cannot connect to RPC: " + config.RPC_URL)
 
